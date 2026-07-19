@@ -9,6 +9,62 @@
 (() => {
   "use strict";
 
+  // ---------- access gate ----------
+  // Password is stored only as a SHA-256 hash; "remember me" keeps the
+  // unlocked state in localStorage so returning visitors skip the prompt.
+
+  const PASS_HASH = "3a54e2b634913ca0900f408fe466f548793cc5aab1d79c7c3b686d5bbec02cf1";
+  const UNLOCK_KEY = "morphly_unlocked";
+
+  async function sha256Hex(text) {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function unlock() {
+    document.body.classList.remove("locked");
+  }
+
+  (function initLock() {
+    const form = document.getElementById("lock-form");
+    const input = document.getElementById("lock-input");
+    const remember = document.getElementById("lock-remember-check");
+    const errorEl = document.getElementById("lock-error");
+    const card = form;
+
+    try {
+      if (localStorage.getItem(UNLOCK_KEY) === PASS_HASH) {
+        unlock();
+        return;
+      }
+    } catch { /* storage unavailable — just show the prompt */ }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.textContent = "";
+      let hash;
+      try {
+        hash = await sha256Hex(input.value);
+      } catch {
+        errorEl.textContent = "Unlock needs a secure (https) connection.";
+        return;
+      }
+      if (hash === PASS_HASH) {
+        if (remember.checked) {
+          try { localStorage.setItem(UNLOCK_KEY, PASS_HASH); } catch { /* ignore */ }
+        }
+        unlock();
+      } else {
+        errorEl.textContent = "Wrong password — try again.";
+        input.value = "";
+        input.focus();
+        card.classList.remove("shake");
+        void card.offsetWidth; // restart the animation
+        card.classList.add("shake");
+      }
+    });
+  })();
+
   // ---------- format catalog ----------
 
   const KIND = { IMAGE: "image", VIDEO: "video", AUDIO: "audio" };

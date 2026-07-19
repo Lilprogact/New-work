@@ -87,6 +87,106 @@ body {
   -webkit-mask-image: radial-gradient(ellipse 90% 65% at 50% 0%, black 40%, transparent 100%);
 }
 
+/* ---------- lock screen ---------- */
+
+body.locked { overflow: hidden; }
+body.locked main,
+body.locked .site-header,
+body.locked .site-footer { filter: blur(14px); pointer-events: none; user-select: none; }
+
+.lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 5, 12, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+body:not(.locked) .lock-screen { display: none; }
+
+.lock-card {
+  width: min(380px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: center;
+  padding: 38px 30px 32px;
+  border-radius: 22px;
+  border: 1px solid var(--border-strong);
+  background: rgba(13, 13, 28, 0.95);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  animation: slide-in 0.35s ease both;
+}
+
+.lock-icon {
+  display: grid;
+  place-items: center;
+  width: 64px; height: 64px;
+  margin: 0 auto 4px;
+  border-radius: 20px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  box-shadow: 0 10px 32px rgba(124, 92, 255, 0.4);
+}
+
+.lock-card h2 {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.lock-sub { font-size: 0.88rem; color: var(--text-dim); }
+
+.lock-card input[type="password"] {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--text);
+  text-align: center;
+  padding: 13px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.lock-card input[type="password"]:focus {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.18);
+}
+
+.lock-remember {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.83rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.lock-remember input { accent-color: var(--accent-1); }
+
+.lock-btn { justify-content: center; }
+
+.lock-error {
+  min-height: 1.1em;
+  font-size: 0.83rem;
+  color: var(--danger);
+}
+
+.lock-card.shake { animation: shake 0.4s ease; }
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  50% { transform: translateX(8px); }
+  75% { transform: translateX(-5px); }
+}
+
 /* ---------- header ---------- */
 
 .site-header {

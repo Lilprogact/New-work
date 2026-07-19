@@ -11,7 +11,24 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
-<body>
+<body class="locked">
+  <div class="lock-screen" id="lock-screen">
+    <form class="lock-card" id="lock-form">
+      <div class="lock-icon">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <h2>Morphly is locked</h2>
+      <p class="lock-sub">Enter the password to open the converter.</p>
+      <input type="password" id="lock-input" placeholder="Password" autocomplete="current-password" autofocus />
+      <label class="lock-remember">
+        <input type="checkbox" id="lock-remember-check" checked />
+        Remember me on this device
+      </label>
+      <button class="btn btn-primary lock-btn" type="submit">Unlock</button>
+      <p class="lock-error" id="lock-error" role="alert"></p>
+    </form>
+  </div>
+
   <div class="bg-orbs" aria-hidden="true">
     <div class="orb orb-1"></div>
     <div class="orb orb-2"></div>
