@@ -17,9 +17,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Publishing to a gh-pages branch auto-enables GitHub Pages for the
-      # repo — the Pages REST API isn't accessible to the workflow token.
+      # Pages for this repo serves from the branch below (chosen when the
+      # site was first enabled), so the site must be published there.
+      # keep_files preserves that branch's .github dir — the workflow token
+      # is not allowed to modify workflow files.
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: .
+          publish_branch: claude/file-transfer-conversion-site-3i2o7d
+          keep_files: true
+      # Also keep gh-pages current in case the Pages source is ever
+      # switched to it in the repo settings.
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          publish_branch: gh-pages
