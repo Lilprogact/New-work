@@ -101,19 +101,29 @@
 
   const KIND_ICON = { [KIND.IMAGE]: "🖼️", [KIND.VIDEO]: "🎬", [KIND.AUDIO]: "🎵" };
 
+  // targets that re-encode video and accept the size (downscale) option
+  const VIDEO_ENCODE_TARGETS = new Set(["mp4", "mkv", "mov", "webm", "avi"]);
+
+  // Cap the longer edge at `box` px. Keeps big phone/screen recordings from
+  // exhausting browser memory — single-threaded wasm can't handle 2732×2048.
+  function scaleArgs(box) {
+    if (!box) return [];
+    return ["-vf", `scale=w=${box}:h=${box}:force_original_aspect_ratio=decrease:force_divisible_by=2`];
+  }
+
   // FFmpeg argument sets per output format (input file is prepended by caller)
-  function ffmpegArgs(target, inputKind) {
+  function ffmpegArgs(target, inputKind, box) {
     switch (target) {
       case "mp4":
       case "mkv":
       case "mov":
-        return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        return [...scaleArgs(box), "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
                 "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k"];
       case "webm":
-        return ["-c:v", "libvpx", "-b:v", "1M", "-deadline", "realtime",
+        return [...scaleArgs(box), "-c:v", "libvpx", "-b:v", "1M", "-deadline", "realtime",
                 "-cpu-used", "5", "-c:a", "libvorbis"];
       case "avi":
-        return ["-c:v", "mpeg4", "-q:v", "5", "-c:a", "libmp3lame", "-q:a", "4"];
+        return [...scaleArgs(box), "-c:v", "mpeg4", "-q:v", "5", "-c:a", "libmp3lame", "-q:a", "4"];
       case "gif":
         return inputKind === KIND.VIDEO
           ? ["-vf", "fps=12,scale=480:-2:flags=lanczos", "-loop", "0"]
@@ -172,6 +182,7 @@
   const CORE_VERSION = "0.12.6";
   let ffmpegPromise = null;
   let onFfmpegProgress = null; // progress callback for the job currently running
+  let ffmpegLogs = []; // rolling log buffer so failures can show the real reason
 
   function loadFFmpeg() {
     if (ffmpegPromise) return ffmpegPromise;
@@ -190,6 +201,10 @@
       const ffmpeg = new FFmpeg();
       ffmpeg.on("progress", ({ progress }) => {
         if (onFfmpegProgress) onFfmpegProgress(progress);
+      });
+      ffmpeg.on("log", ({ message }) => {
+        ffmpegLogs.push(message);
+        if (ffmpegLogs.length > 60) ffmpegLogs.shift();
       });
 
       await ffmpeg.load({
@@ -269,7 +284,17 @@
     return blob;
   }
 
-  async function convertWithFFmpeg(file, target, kind, onProgress) {
+  // pull the most informative line out of the log buffer for error messages
+  function lastFfmpegError() {
+    for (let i = ffmpegLogs.length - 1; i >= 0; i--) {
+      if (/error|invalid|failed|unsupported|not found|no such|denied/i.test(ffmpegLogs[i])) {
+        return ffmpegLogs[i].trim();
+      }
+    }
+    return "";
+  }
+
+  async function convertWithFFmpeg(file, target, kind, box, onProgress) {
     const ffmpeg = await loadFFmpeg();
     const { fetchFile } = window.FFmpegUtil;
 
@@ -279,12 +304,23 @@
       const outName = `output.${target}`;
 
       onFfmpegProgress = onProgress;
+      ffmpegLogs = [];
       try {
         await ffmpeg.writeFile(inName, await fetchFile(file));
-        const code = await ffmpeg.exec(["-i", inName, ...ffmpegArgs(target, kind), outName]);
-        if (code !== 0) throw new Error("FFmpeg could not convert this file.");
+        const code = await ffmpeg.exec(["-i", inName, ...ffmpegArgs(target, kind, box), outName]);
+        if (code !== 0) {
+          const detail = lastFfmpegError();
+          throw new Error(detail ? `Conversion failed: ${detail}` : "FFmpeg could not convert this file.");
+        }
         const data = await ffmpeg.readFile(outName);
         return new Blob([data.buffer], { type: OUTPUT_MIME[target] || "application/octet-stream" });
+      } catch (err) {
+        // a crashed worker usually means the video was too big for wasm memory
+        if (err && /memory|terminate|abort|out of bounds/i.test(err.message || "")) {
+          ffmpegPromise = null; // engine is dead — reload it on the next attempt
+          throw new Error('Ran out of browser memory — pick the "720p · fast" size and try again.');
+        }
+        throw err;
       } finally {
         onFfmpegProgress = null;
         // best-effort cleanup of the in-memory FS
@@ -330,7 +366,11 @@
 
       if (!blob) {
         statusEl.textContent = "Waiting for engine…";
-        blob = await convertWithFFmpeg(file, target, kind, (p) => {
+        const qualitySel = $('[data-role="quality"]', el);
+        const box = kind === KIND.VIDEO && VIDEO_ENCODE_TARGETS.has(target)
+          ? parseInt(qualitySel.value, 10)
+          : 0;
+        blob = await convertWithFFmpeg(file, target, kind, box, (p) => {
           const pct = Math.max(0, Math.min(100, Math.round(p * 100)));
           bar.classList.remove("indeterminate");
           bar.style.width = `${pct}%`;
@@ -391,11 +431,21 @@
         select.appendChild(opt);
       }
 
+      const qualityWrap = $('[data-role="quality-wrap"]', node);
+      const syncQualityVisibility = () => {
+        qualityWrap.hidden = !(kind === KIND.VIDEO && VIDEO_ENCODE_TARGETS.has(select.value));
+      };
+      syncQualityVisibility();
+
       $('[data-role="convert"]', node).addEventListener("click", () => convertItem(id));
       $('[data-role="remove"]', node).addEventListener("click", () => removeItem(id));
       select.addEventListener("change", () => {
         const dl = $('[data-role="download"]', node);
         dl.hidden = true; // stale result for a different format
+        syncQualityVisibility();
+      });
+      $('[data-role="quality"]', node).addEventListener("change", () => {
+        $('[data-role="download"]', node).hidden = true;
       });
 
       fileList.appendChild(node);
