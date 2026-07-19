@@ -1,17 +1,10 @@
-/* ============ Morphly — in-browser file conversion ============ */
-/*
- * Images  → converted instantly with the Canvas API (png / jpg / webp)
- * Video, audio, gifs & exotic image formats → FFmpeg compiled to WebAssembly,
- * loaded lazily from a CDN the first time it's needed.
- * Nothing ever leaves the user's device.
- */
+/* ============ UltraTune — UI wiring ============ */
 
 (() => {
   "use strict";
 
   // ---------- access gate ----------
-  // Password is stored only as a SHA-256 hash; "remember me" keeps the
-  // unlocked state in localStorage so returning visitors skip the prompt.
+  // Same password as before the redesign; stored only as a SHA-256 hash.
 
   const PASS_HASH = "3a54e2b634913ca0900f408fe466f548793cc5aab1d79c7c3b686d5bbec02cf1";
   const UNLOCK_KEY = "morphly_unlocked";
@@ -21,531 +14,502 @@
     return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
   }
 
-  function unlock() {
-    document.body.classList.remove("locked");
-  }
-
   (function initLock() {
     const form = document.getElementById("lock-form");
     const input = document.getElementById("lock-input");
     const remember = document.getElementById("lock-remember-check");
     const errorEl = document.getElementById("lock-error");
-    const card = form;
+    const unlock = () => document.body.classList.remove("locked");
 
     try {
-      if (localStorage.getItem(UNLOCK_KEY) === PASS_HASH) {
-        unlock();
-        return;
-      }
+      if (localStorage.getItem(UNLOCK_KEY) === PASS_HASH) { unlock(); return; }
     } catch { /* storage unavailable — just show the prompt */ }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       errorEl.textContent = "";
       let hash;
-      try {
-        hash = await sha256Hex(input.value);
-      } catch {
-        errorEl.textContent = "Unlock needs a secure (https) connection.";
-        return;
-      }
+      try { hash = await sha256Hex(input.value); }
+      catch { errorEl.textContent = "Unlock needs a secure (https) connection."; return; }
       if (hash === PASS_HASH) {
-        if (remember.checked) {
-          try { localStorage.setItem(UNLOCK_KEY, PASS_HASH); } catch { /* ignore */ }
-        }
+        if (remember.checked) { try { localStorage.setItem(UNLOCK_KEY, PASS_HASH); } catch { /* ignore */ } }
         unlock();
       } else {
         errorEl.textContent = "Wrong password — try again.";
         input.value = "";
         input.focus();
-        card.classList.remove("shake");
-        void card.offsetWidth; // restart the animation
-        card.classList.add("shake");
+        form.classList.remove("shake");
+        void form.offsetWidth;
+        form.classList.add("shake");
       }
     });
   })();
 
-  // ---------- format catalog ----------
-
-  const KIND = { IMAGE: "image", VIDEO: "video", AUDIO: "audio" };
-
-  const TARGETS = {
-    [KIND.IMAGE]: ["png", "jpg", "webp", "gif", "bmp", "tiff"],
-    [KIND.VIDEO]: ["mp4", "webm", "mov", "mkv", "avi", "gif", "mp3", "wav", "ogg"],
-    [KIND.AUDIO]: ["mp3", "wav", "ogg", "flac", "m4a", "aac"],
-  };
-
-  // formats the Canvas API can encode natively — no FFmpeg needed
-  const CANVAS_TARGETS = { png: "image/png", jpg: "image/jpeg", webp: "image/webp" };
-
-  const OUTPUT_MIME = {
-    png: "image/png", jpg: "image/jpeg", webp: "image/webp", gif: "image/gif",
-    bmp: "image/bmp", tiff: "image/tiff",
-    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime",
-    mkv: "video/x-matroska", avi: "video/x-msvideo",
-    mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg",
-    flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac",
-  };
-
-  const EXT_KIND = {
-    png: KIND.IMAGE, jpg: KIND.IMAGE, jpeg: KIND.IMAGE, webp: KIND.IMAGE,
-    gif: KIND.IMAGE, bmp: KIND.IMAGE, tiff: KIND.IMAGE, tif: KIND.IMAGE,
-    avif: KIND.IMAGE, svg: KIND.IMAGE, ico: KIND.IMAGE, heic: KIND.IMAGE,
-    mp4: KIND.VIDEO, webm: KIND.VIDEO, mov: KIND.VIDEO, mkv: KIND.VIDEO,
-    avi: KIND.VIDEO, flv: KIND.VIDEO, wmv: KIND.VIDEO, m4v: KIND.VIDEO,
-    mpg: KIND.VIDEO, mpeg: KIND.VIDEO, ts: KIND.VIDEO, "3gp": KIND.VIDEO,
-    mp3: KIND.AUDIO, wav: KIND.AUDIO, ogg: KIND.AUDIO, oga: KIND.AUDIO,
-    flac: KIND.AUDIO, m4a: KIND.AUDIO, aac: KIND.AUDIO, wma: KIND.AUDIO,
-    opus: KIND.AUDIO, aiff: KIND.AUDIO, amr: KIND.AUDIO,
-  };
-
-  const KIND_ICON = { [KIND.IMAGE]: "🖼️", [KIND.VIDEO]: "🎬", [KIND.AUDIO]: "🎵" };
-
-  // targets that re-encode video and accept the size (downscale) option
-  const VIDEO_ENCODE_TARGETS = new Set(["mp4", "mkv", "mov", "webm", "avi"]);
-
-  // Cap the longer edge at `box` px. Keeps big phone/screen recordings from
-  // exhausting browser memory — single-threaded wasm can't handle 2732×2048.
-  function scaleArgs(box) {
-    if (!box) return [];
-    return ["-vf", `scale=w=${box}:h=${box}:force_original_aspect_ratio=decrease:force_divisible_by=2`];
-  }
-
-  // FFmpeg argument sets per output format (input file is prepended by caller)
-  function ffmpegArgs(target, inputKind, box) {
-    switch (target) {
-      case "mp4":
-      case "mkv":
-      case "mov":
-        return [...scaleArgs(box), "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k"];
-      case "webm":
-        return [...scaleArgs(box), "-c:v", "libvpx", "-b:v", "1M", "-deadline", "realtime",
-                "-cpu-used", "5", "-c:a", "libvorbis"];
-      case "avi":
-        return [...scaleArgs(box), "-c:v", "mpeg4", "-q:v", "5", "-c:a", "libmp3lame", "-q:a", "4"];
-      case "gif":
-        return inputKind === KIND.VIDEO
-          ? ["-vf", "fps=12,scale=480:-2:flags=lanczos", "-loop", "0"]
-          : [];
-      case "mp3":
-        return ["-vn", "-c:a", "libmp3lame", "-q:a", "2"];
-      case "wav":
-        return ["-vn", "-c:a", "pcm_s16le"];
-      case "ogg":
-        return ["-vn", "-c:a", "libvorbis", "-q:a", "5"];
-      case "flac":
-        return ["-vn", "-c:a", "flac"];
-      case "m4a":
-      case "aac":
-        return ["-vn", "-c:a", "aac", "-b:a", "192k"];
-      default:
-        return []; // plain remux / image rewrite — let ffmpeg pick defaults
-    }
-  }
-
-  // ---------- state ----------
-
-  /** @type {Map<number, {file: File, kind: string, el: HTMLElement, busy: boolean, resultUrl?: string}>} */
-  const items = new Map();
-  let nextId = 1;
-
-  // ---------- dom ----------
-
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const dropzone = $("#dropzone");
-  const fileInput = $("#file-input");
-  const queueSection = $("#queue-section");
-  const fileList = $("#file-list");
-  const template = $("#file-item-template");
-  const engineStatus = $("#engine-status");
-  const engineStatusText = $("#engine-status-text");
-
-  // ---------- hero word rotation ----------
-
-  const WORDS = ["anything", "videos", "music", "images", "GIFs", "podcasts"];
-  let wordIdx = 0;
-  setInterval(() => {
-    wordIdx = (wordIdx + 1) % WORDS.length;
-    const el = $("#rotating-word");
-    el.style.opacity = "0";
-    setTimeout(() => {
-      el.textContent = WORDS[wordIdx];
-      el.style.transition = "opacity 0.4s ease";
-      el.style.opacity = "1";
-    }, 250);
-  }, 2600);
-
-  // ---------- ffmpeg engine (lazy singleton, self-hosted) ----------
-
-  const ENGINE_BASE = new URL("vendor/ffmpeg/", window.location.href);
-  let ffmpegPromise = null;
-  let onFfmpegProgress = null; // progress callback for the job currently running
-  let ffmpegLogs = []; // rolling log buffer so failures can show the real reason
-
-  // fetch with a byte-level progress callback so the ~30 MB wasm download
-  // shows real percentages instead of an opaque spinner
-  async function fetchWithProgress(url, onPct) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Engine file failed to load (${res.status}): ${url}`);
-    const total = parseInt(res.headers.get("Content-Length") || "0", 10);
-    if (!res.body || !total) return new Uint8Array(await res.arrayBuffer());
-    const reader = res.body.getReader();
-    const chunks = [];
-    let received = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      received += value.length;
-      onPct(Math.round((received / total) * 100));
-    }
-    const out = new Uint8Array(received);
-    let offset = 0;
-    for (const c of chunks) { out.set(c, offset); offset += c.length; }
-    return out;
-  }
-
-  function loadFFmpeg() {
-    if (ffmpegPromise) return ffmpegPromise;
-
-    ffmpegPromise = (async () => {
-      if (!window.FFmpegWASM || !window.FFmpegUtil) {
-        throw new Error("Conversion engine script missing — refresh the page and try again.");
-      }
-      engineStatus.hidden = false;
-      engineStatusText.textContent = "Loading conversion engine…";
-
-      const { FFmpeg } = window.FFmpegWASM;
-
-      const wasmBytes = await fetchWithProgress(new URL("ffmpeg-core.wasm", ENGINE_BASE), (pct) => {
-        engineStatusText.textContent = `Downloading conversion engine… ${pct}% (one time)`;
-      });
-      engineStatusText.textContent = "Starting conversion engine…";
-
-      const ffmpeg = new FFmpeg();
-      ffmpeg.on("progress", ({ progress }) => {
-        if (onFfmpegProgress) onFfmpegProgress(progress);
-      });
-      ffmpeg.on("log", ({ message }) => {
-        ffmpegLogs.push(message);
-        if (ffmpegLogs.length > 60) ffmpegLogs.shift();
-      });
-
-      // no classWorkerURL: ffmpeg.js then spawns its worker (814.ffmpeg.js)
-      // from its own directory as a CLASSIC worker — required, because the
-      // module-worker path it uses otherwise cannot importScripts the UMD core
-      await ffmpeg.load({
-        coreURL: new URL("ffmpeg-core.js", ENGINE_BASE).href,
-        wasmURL: URL.createObjectURL(new Blob([wasmBytes], { type: "application/wasm" })),
-      });
-
-      engineStatus.hidden = true;
-      return ffmpeg;
-    })().catch((err) => {
-      engineStatus.hidden = true;
-      ffmpegPromise = null; // allow retry
-      throw err;
-    });
-
-    return ffmpegPromise;
-  }
-
-  // FFmpeg runs one job at a time — chain conversions through a queue
-  let jobChain = Promise.resolve();
-  function enqueueJob(job) {
-    const run = jobChain.then(job, job);
-    jobChain = run.catch(() => {});
-    return run;
-  }
-
   // ---------- helpers ----------
 
-  function extOf(name) {
-    const m = /\.([a-z0-9]+)$/i.exec(name);
-    return m ? m[1].toLowerCase() : "";
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const fmtTime = (s) => {
+    if (!isFinite(s)) s = 0;
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return m + ":" + String(sec).padStart(2, "0");
+  };
+
+  let toastTimer;
+  function toast(msg, ms = 3200) {
+    const el = $("#toast");
+    el.textContent = msg;
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, ms);
   }
 
-  function kindOf(file) {
-    if (file.type.startsWith("image/")) return KIND.IMAGE;
-    if (file.type.startsWith("video/")) return KIND.VIDEO;
-    if (file.type.startsWith("audio/")) return KIND.AUDIO;
-    return EXT_KIND[extOf(file.name)] || null;
-  }
+  // ---------- decks ----------
 
-  function baseName(name) {
-    return name.replace(/\.[a-z0-9]+$/i, "");
-  }
+  const decks = { a: new Deck("a"), b: new Deck("b") };
+  const deckEls = { a: $("#deck-a"), b: $("#deck-b") };
+  const ACCENTS = { a: "#22d3ee", b: "#f471ff" };
 
-  function humanSize(bytes) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-    return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
-  }
+  function wireDeck(id) {
+    const deck = decks[id];
+    const root = deckEls[id];
+    const role = (r) => root.querySelector(`[data-role="${r}"]`);
 
-  // ---------- conversion ----------
+    const playBtn = role("play");
+    const platter = role("platter");
+    const wave = role("wave");
+    const tempoVal = role("tempo-val");
 
-  async function convertWithCanvas(file, target) {
-    const mime = CANVAS_TARGETS[target];
-    const bitmap = await createImageBitmap(file);
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    const ctx = canvas.getContext("2d");
-    if (target === "jpg") {
-      // JPEG has no alpha — flatten onto white instead of black
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-    ctx.drawImage(bitmap, 0, 0);
-    bitmap.close();
+    deck.onstatechange = () => {
+      playBtn.textContent = deck.playing ? "❚❚" : "▶";
+      playBtn.classList.toggle("active", deck.playing);
+      platter.classList.toggle("spinning", deck.playing);
+      role("title").textContent = deck.meta.title;
+      role("artist").textContent = deck.meta.artist || "—";
+      role("src").textContent = deck.meta.src || "";
+      role("dur").textContent = fmtTime(deck.duration);
+      role("boost").classList.toggle("on", deck.boostOn);
+      role("echo").classList.toggle("on", deck.echoOn);
+      root.querySelector(".loop-group").classList.toggle("looping", deck.looping);
+    };
 
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, mime, 0.92));
-    if (!blob || blob.type !== mime) {
-      throw new Error("canvas-unsupported"); // caller falls back to ffmpeg
-    }
-    return blob;
-  }
+    playBtn.addEventListener("click", () => { AudioEngine.resume(); deck.toggle(); });
+    role("cue").addEventListener("click", () => deck.cue());
+    role("brake").addEventListener("click", () => deck.brake());
+    role("loop-in").addEventListener("click", () => deck.setLoopIn());
+    role("loop-out").addEventListener("click", () => deck.setLoopOut());
+    role("loop-exit").addEventListener("click", () => deck.exitLoop());
 
-  // pull the most informative line out of the log buffer for error messages
-  function lastFfmpegError() {
-    for (let i = ffmpegLogs.length - 1; i >= 0; i--) {
-      if (/error|invalid|failed|unsupported|not found|no such|denied/i.test(ffmpegLogs[i])) {
-        return ffmpegLogs[i].trim();
-      }
-    }
-    return "";
-  }
+    const tempo = role("tempo");
+    const updateTempoLabel = () => {
+      const pct = (deck.rate - 1) * 100;
+      tempoVal.textContent = (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%";
+    };
+    tempo.addEventListener("input", () => { deck.setRate(parseFloat(tempo.value)); updateTempoLabel(); });
+    role("tempo-reset").addEventListener("click", () => {
+      tempo.value = "1";
+      deck.setRate(1);
+      updateTempoLabel();
+    });
 
-  async function convertWithFFmpeg(file, target, kind, box, onProgress) {
-    const ffmpeg = await loadFFmpeg();
-    const { fetchFile } = window.FFmpegUtil;
+    role("eq-hi").addEventListener("input", (e) => deck.setEQ("hi", parseFloat(e.target.value)));
+    role("eq-mid").addEventListener("input", (e) => deck.setEQ("mid", parseFloat(e.target.value)));
+    role("eq-lo").addEventListener("input", (e) => deck.setEQ("lo", parseFloat(e.target.value)));
+    role("filter").addEventListener("input", (e) => deck.setFilter(parseFloat(e.target.value)));
+    role("filter").addEventListener("dblclick", (e) => { e.target.value = 0; deck.setFilter(0); });
+    role("volume").addEventListener("input", (e) => deck.setVolume(parseFloat(e.target.value)));
+    role("boost").addEventListener("click", () => deck.toggleBoost());
+    role("echo").addEventListener("click", () => deck.toggleEcho());
 
-    return enqueueJob(async () => {
-      const inExt = extOf(file.name) || "bin";
-      const inName = `input.${inExt}`;
-      const outName = `output.${target}`;
+    // click waveform to seek
+    wave.addEventListener("pointerdown", (e) => {
+      if (!deck.buffer) return;
+      const rect = wave.getBoundingClientRect();
+      deck.seek(((e.clientX - rect.left) / rect.width) * deck.duration);
+    });
 
-      onFfmpegProgress = onProgress;
-      ffmpegLogs = [];
-      try {
-        await ffmpeg.writeFile(inName, await fetchFile(file));
-        const code = await ffmpeg.exec(["-i", inName, ...ffmpegArgs(target, kind, box), outName]);
-        if (code !== 0) {
-          const detail = lastFfmpegError();
-          throw new Error(detail ? `Conversion failed: ${detail}` : "FFmpeg could not convert this file.");
-        }
-        const data = await ffmpeg.readFile(outName);
-        return new Blob([data.buffer], { type: OUTPUT_MIME[target] || "application/octet-stream" });
-      } catch (err) {
-        // a crashed worker usually means the video was too big for wasm memory
-        if (err && /memory|terminate|abort|out of bounds/i.test(err.message || "")) {
-          ffmpegPromise = null; // engine is dead — reload it on the next attempt
-          throw new Error('Ran out of browser memory — pick the "720p · fast" size and try again.');
-        }
-        throw err;
-      } finally {
-        onFfmpegProgress = null;
-        // best-effort cleanup of the in-memory FS
-        for (const n of [inName, outName]) {
-          try { await ffmpeg.deleteFile(n); } catch { /* ignore */ }
-        }
-      }
+    // drop an audio file straight onto the deck
+    const fileInput = role("file");
+    root.addEventListener("dragover", (e) => { e.preventDefault(); root.classList.add("dragover"); });
+    root.addEventListener("dragleave", () => root.classList.remove("dragover"));
+    root.addEventListener("drop", (e) => {
+      e.preventDefault();
+      root.classList.remove("dragover");
+      const file = [...e.dataTransfer.files].find((f) => f.type.startsWith("audio/") || /\.(mp3|wav|ogg|flac|m4a|aac)$/i.test(f.name));
+      if (file) loadFileIntoDeck(file, id);
+    });
+    root.querySelector(".track-meta").addEventListener("dblclick", () => fileInput.click());
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files[0]) loadFileIntoDeck(fileInput.files[0], id);
+      fileInput.value = "";
     });
   }
 
-  async function convertItem(id) {
-    const item = items.get(id);
-    if (!item || item.busy) return;
-
-    const { file, kind, el } = item;
-    const target = $('[data-role="format"]', el).value;
-    const statusEl = $('[data-role="status"]', el);
-    const track = $('[data-role="progress-track"]', el);
-    const bar = $('[data-role="progress-bar"]', el);
-    const convertBtn = $('[data-role="convert"]', el);
-    const downloadBtn = $('[data-role="download"]', el);
-
-    item.busy = true;
-    convertBtn.disabled = true;
-    downloadBtn.hidden = true;
-    if (item.resultUrl) { URL.revokeObjectURL(item.resultUrl); item.resultUrl = null; }
-    statusEl.className = "file-status";
-    track.hidden = false;
-    bar.style.width = "0%";
-    bar.classList.add("indeterminate");
-
+  async function loadFileIntoDeck(file, deckId) {
     try {
-      let blob = null;
+      toast(`Loading “${file.name}” into Deck ${deckId.toUpperCase()}…`);
+      await decks[deckId].load(await file.arrayBuffer(), {
+        title: file.name.replace(/\.[^.]+$/, ""),
+        artist: "Local file",
+        src: "Full track · local",
+      });
+      toast(`Deck ${deckId.toUpperCase()} ready — hit play.`);
+    } catch {
+      toast("Couldn't decode that file — is it an audio format your browser supports?");
+    }
+  }
 
-      if (kind === KIND.IMAGE && CANVAS_TARGETS[target]) {
-        statusEl.textContent = "Converting…";
-        try {
-          blob = await convertWithCanvas(file, target);
-        } catch {
-          blob = null; // fall through to ffmpeg
-        }
+  async function loadSpotifyTrackIntoDeck(track, deckId) {
+    if (!track.preview_url) {
+      toast("Spotify has no preview clip for this track — DRM blocks the full stream. Try another track or a local file.", 4500);
+      return;
+    }
+    try {
+      toast(`Loading “${track.name}” into Deck ${deckId.toUpperCase()}…`);
+      const res = await fetch(track.preview_url);
+      if (!res.ok) throw new Error();
+      await decks[deckId].load(await res.arrayBuffer(), {
+        title: track.name,
+        artist: track.artists.map((a) => a.name).join(", "),
+        src: "30s preview · Spotify",
+      });
+      toast(`Deck ${deckId.toUpperCase()} ready — hit play.`);
+    } catch {
+      toast("Couldn't fetch that preview from Spotify — try another track.");
+    }
+  }
+
+  wireDeck("a");
+  wireDeck("b");
+
+  // ---------- crossfader & master ----------
+
+  function applyCrossfade(x) {
+    // equal-power curve
+    decks.a.setCrossfadeGain(Math.cos((x + 1) / 2 * Math.PI / 2));
+    decks.b.setCrossfadeGain(Math.cos((1 - x) / 2 * Math.PI / 2));
+  }
+  const xfader = $("#crossfader");
+  xfader.addEventListener("input", () => applyCrossfade(parseFloat(xfader.value)));
+  xfader.addEventListener("dblclick", () => { xfader.value = 0; applyCrossfade(0); });
+  $("#master-vol").addEventListener("input", (e) => AudioEngine.setMasterVolume(parseFloat(e.target.value)));
+
+  // ---------- keyboard ----------
+
+  document.addEventListener("keydown", (e) => {
+    if (document.body.classList.contains("locked")) return;
+    const tag = document.activeElement.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if (e.code === "Space") { e.preventDefault(); decks.a.toggle(); }
+    if (e.code === "Enter") { e.preventDefault(); decks.b.toggle(); }
+  });
+
+  // ---------- rendering: waveforms + master visualizer ----------
+
+  function drawWave(deck, canvas, accent) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== w * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+    const g = canvas.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    if (!deck.peaks) {
+      g.fillStyle = "rgba(255,255,255,.06)";
+      g.fillRect(0, h / 2 - 1, w, 2);
+      return;
+    }
+    const n = deck.peaks.length;
+    const pos = deck.position() / deck.duration;
+    const barW = w / n;
+    for (let i = 0; i < n; i++) {
+      const amp = Math.max(deck.peaks[i] * (h / 2 - 2), 1);
+      g.fillStyle = i / n <= pos ? accent : "rgba(255,255,255,.18)";
+      g.fillRect(i * barW, h / 2 - amp, Math.max(barW - 0.5, 0.5), amp * 2);
+    }
+    // loop region
+    if (deck.loopStart != null) {
+      const x1 = (deck.loopStart / deck.duration) * w;
+      const x2 = deck.loopEnd != null ? (deck.loopEnd / deck.duration) * w : x1 + 2;
+      g.fillStyle = "rgba(250, 204, 21, .18)";
+      g.fillRect(x1, 0, x2 - x1, h);
+    }
+    // cue marker
+    const cx = (deck.cuePoint / deck.duration) * w;
+    g.fillStyle = "#facc15";
+    g.fillRect(cx - 1, 0, 2, h);
+    // playhead
+    g.fillStyle = "#fff";
+    g.fillRect(pos * w - 1, 0, 2, h);
+  }
+
+  const vizCanvas = $("#master-viz");
+  function drawViz() {
+    const analyser = AudioEngine.analyser;
+    const dpr = window.devicePixelRatio || 1;
+    const w = vizCanvas.clientWidth, h = vizCanvas.clientHeight;
+    if (vizCanvas.width !== w * dpr) { vizCanvas.width = w * dpr; vizCanvas.height = h * dpr; }
+    const g = vizCanvas.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+    const bars = 96;
+    const step = Math.floor(data.length / bars);
+    const barW = w / bars;
+    for (let i = 0; i < bars; i++) {
+      const v = data[i * step] / 255;
+      const bh = Math.max(v * h, 2);
+      const hue = 190 + (i / bars) * 110; // cyan → magenta
+      g.fillStyle = `hsla(${hue}, 95%, 62%, ${0.35 + v * 0.65})`;
+      g.fillRect(i * barW + 1, h - bh, barW - 2, bh);
+    }
+  }
+
+  function renderLoop() {
+    for (const id of ["a", "b"]) {
+      const deck = decks[id];
+      const root = deckEls[id];
+      drawWave(deck, root.querySelector('[data-role="wave"]'), ACCENTS[id]);
+      root.querySelector('[data-role="time"]').textContent = fmtTime(deck.position());
+    }
+    drawViz();
+    requestAnimationFrame(renderLoop);
+  }
+  requestAnimationFrame(renderLoop);
+
+  // ---------- recording ----------
+
+  const recBtn = $("#rec-btn");
+  recBtn.addEventListener("click", async () => {
+    if (!AudioEngine.recording) {
+      AudioEngine.resume();
+      AudioEngine.startRecording();
+      recBtn.classList.add("recording");
+      $("#rec-label").textContent = "STOP";
+      toast("Recording your mix — everything you hear is captured.");
+    } else {
+      const blob = await AudioEngine.stopRecording();
+      recBtn.classList.remove("recording");
+      $("#rec-label").textContent = "REC";
+      if (blob && blob.size > 0) {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "ultratune-mix.webm";
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+        toast("Mix saved — check your downloads.");
       }
+    }
+  });
 
-      if (!blob) {
-        statusEl.textContent = "Waiting for engine…";
-        const qualitySel = $('[data-role="quality"]', el);
-        const box = kind === KIND.VIDEO && VIDEO_ENCODE_TARGETS.has(target)
-          ? parseInt(qualitySel.value, 10)
-          : 0;
-        blob = await convertWithFFmpeg(file, target, kind, box, (p) => {
-          const pct = Math.max(0, Math.min(100, Math.round(p * 100)));
-          bar.classList.remove("indeterminate");
-          bar.style.width = `${pct}%`;
-          statusEl.textContent = `Converting… ${pct}%`;
-        });
+  // ---------- library: tabs ----------
+
+  const panes = { search: $("#pane-search"), playlists: $("#pane-playlists"), local: $("#pane-local") };
+  document.querySelectorAll(".lib-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".lib-tab").forEach((t) => t.classList.toggle("active", t === tab));
+      for (const [name, pane] of Object.entries(panes)) pane.hidden = name !== tab.dataset.tab;
+      if (tab.dataset.tab === "playlists") loadPlaylists();
+    });
+  });
+
+  // ---------- library: track rows ----------
+
+  const rowTemplate = $("#track-row-template");
+
+  function renderSpotifyTracks(listEl, tracks) {
+    listEl.innerHTML = "";
+    if (!tracks.length) {
+      listEl.innerHTML = '<li class="lib-empty">Nothing found.</li>';
+      return;
+    }
+    for (const track of tracks) {
+      const row = rowTemplate.content.firstElementChild.cloneNode(true);
+      const art = track.album && track.album.images && track.album.images.length
+        ? track.album.images[track.album.images.length - 1].url : "";
+      const img = $('[data-role="art"]', row);
+      if (art) img.src = art; else img.remove();
+      $('[data-role="title"]', row).textContent = track.name;
+      $('[data-role="artist"]', row).textContent = track.artists.map((a) => a.name).join(", ");
+      $('[data-role="dur"]', row).textContent = fmtTime(track.duration_ms / 1000);
+      const badge = $('[data-role="badge"]', row);
+      if (track.preview_url) {
+        badge.textContent = "30s preview";
+        badge.hidden = false;
+      } else {
+        badge.textContent = "no preview";
+        badge.classList.add("badge-muted");
+        badge.hidden = false;
+        row.classList.add("row-disabled");
       }
+      $('[data-role="to-a"]', row).addEventListener("click", () => loadSpotifyTrackIntoDeck(track, "a"));
+      $('[data-role="to-b"]', row).addEventListener("click", () => loadSpotifyTrackIntoDeck(track, "b"));
+      listEl.appendChild(row);
+    }
+  }
 
-      bar.classList.remove("indeterminate");
-      bar.style.width = "100%";
-      statusEl.textContent = `Done — ${humanSize(blob.size)}`;
-      statusEl.classList.add("done");
+  // ---------- library: search ----------
 
-      item.resultUrl = URL.createObjectURL(blob);
-      downloadBtn.href = item.resultUrl;
-      downloadBtn.download = `${baseName(file.name)}.${target}`;
-      downloadBtn.textContent = `Download .${target}`;
-      downloadBtn.hidden = false;
+  const searchInput = $("#search-input");
+  async function runSearch() {
+    const q = searchInput.value.trim();
+    if (!q) return;
+    if (!Spotify.loggedIn()) { openSpotifyFlow(); return; }
+    try {
+      $("#search-results").innerHTML = '<li class="lib-empty">Searching…</li>';
+      renderSpotifyTracks($("#search-results"), await Spotify.searchTracks(q));
     } catch (err) {
-      console.error(err);
-      bar.classList.remove("indeterminate");
-      track.hidden = true;
-      statusEl.textContent = err && err.message ? err.message : "Conversion failed.";
-      statusEl.classList.add("error");
-    } finally {
-      item.busy = false;
-      convertBtn.disabled = false;
+      if (err.message === "not-logged-in") { updateSpotifyButton(); openSpotifyFlow(); }
+      else toast("Spotify search failed — " + err.message);
     }
   }
+  $("#search-btn").addEventListener("click", runSearch);
+  searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
 
-  // ---------- file queue UI ----------
+  // ---------- library: playlists ----------
 
-  function addFiles(fileListLike) {
-    for (const file of fileListLike) {
-      const kind = kindOf(file);
-      if (!kind) {
-        flashDropzoneError(`"${file.name}" isn't a supported image, video or audio file.`);
-        continue;
-      }
-
-      const id = nextId++;
-      const node = template.content.firstElementChild.cloneNode(true);
-      node.dataset.id = id;
-
-      $('[data-role="icon"]', node).textContent = KIND_ICON[kind];
-      $('[data-role="name"]', node).textContent = file.name;
-      $('[data-role="name"]', node).title = file.name;
-      $('[data-role="size"]', node).textContent = humanSize(file.size);
-      $('[data-role="type"]', node).textContent =
-        (extOf(file.name) || kind).toUpperCase() + ` ${kind}`;
-
-      const select = $('[data-role="format"]', node);
-      const sourceExt = extOf(file.name);
-      for (const fmt of TARGETS[kind]) {
-        if (fmt === sourceExt || (fmt === "jpg" && sourceExt === "jpeg")) continue;
-        const opt = document.createElement("option");
-        opt.value = fmt;
-        opt.textContent = fmt.toUpperCase();
-        select.appendChild(opt);
-      }
-
-      const qualityWrap = $('[data-role="quality-wrap"]', node);
-      const syncQualityVisibility = () => {
-        qualityWrap.hidden = !(kind === KIND.VIDEO && VIDEO_ENCODE_TARGETS.has(select.value));
-      };
-      syncQualityVisibility();
-
-      $('[data-role="convert"]', node).addEventListener("click", () => convertItem(id));
-      $('[data-role="remove"]', node).addEventListener("click", () => removeItem(id));
-      select.addEventListener("change", () => {
-        const dl = $('[data-role="download"]', node);
-        dl.hidden = true; // stale result for a different format
-        syncQualityVisibility();
+  let playlistsLoaded = false;
+  async function loadPlaylists(force = false) {
+    if (!Spotify.loggedIn()) {
+      $("#playlist-nav").innerHTML = "";
+      $("#playlist-results").innerHTML = '<li class="lib-empty">Connect Spotify to browse your playlists.</li>';
+      return;
+    }
+    if (playlistsLoaded && !force) return;
+    const nav = $("#playlist-nav");
+    nav.innerHTML = '<span class="lib-empty">Loading playlists…</span>';
+    try {
+      const lists = await Spotify.myPlaylists();
+      nav.innerHTML = "";
+      const likedBtn = document.createElement("button");
+      likedBtn.className = "pl-chip";
+      likedBtn.textContent = "♥ Liked songs";
+      likedBtn.addEventListener("click", async () => {
+        selectChip(likedBtn);
+        renderSpotifyTracks($("#playlist-results"), await Spotify.savedTracks());
       });
-      $('[data-role="quality"]', node).addEventListener("change", () => {
-        $('[data-role="download"]', node).hidden = true;
-      });
-
-      fileList.appendChild(node);
-      items.set(id, { file, kind, el: node, busy: false, resultUrl: null });
-    }
-
-    queueSection.hidden = items.size === 0;
-    if (items.size > 0) {
-      queueSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      nav.appendChild(likedBtn);
+      for (const pl of lists) {
+        const btn = document.createElement("button");
+        btn.className = "pl-chip";
+        btn.textContent = pl.name;
+        btn.addEventListener("click", async () => {
+          selectChip(btn);
+          $("#playlist-results").innerHTML = '<li class="lib-empty">Loading tracks…</li>';
+          renderSpotifyTracks($("#playlist-results"), await Spotify.playlistTracks(pl.id));
+        });
+        nav.appendChild(btn);
+      }
+      playlistsLoaded = true;
+    } catch (err) {
+      nav.innerHTML = "";
+      if (err.message === "not-logged-in") loadPlaylists(true);
+      else toast("Couldn't load playlists — " + err.message);
     }
   }
-
-  function removeItem(id) {
-    const item = items.get(id);
-    if (!item) return;
-    if (item.resultUrl) URL.revokeObjectURL(item.resultUrl);
-    item.el.remove();
-    items.delete(id);
-    queueSection.hidden = items.size === 0;
+  function selectChip(chip) {
+    document.querySelectorAll(".pl-chip").forEach((c) => c.classList.toggle("active", c === chip));
   }
 
-  let errorTimer = null;
-  function flashDropzoneError(msg) {
-    const sub = $(".dz-sub");
-    if (!sub.dataset.original) sub.dataset.original = sub.innerHTML;
-    sub.textContent = msg;
-    sub.style.color = "var(--danger)";
-    clearTimeout(errorTimer);
-    errorTimer = setTimeout(() => {
-      sub.innerHTML = sub.dataset.original;
-      sub.style.color = "";
-    }, 4000);
-  }
+  // ---------- library: local files ----------
 
-  // ---------- events ----------
-
-  dropzone.addEventListener("click", () => fileInput.click());
-  dropzone.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      fileInput.click();
+  const localFiles = [];
+  function renderLocalFiles() {
+    const list = $("#local-results");
+    list.innerHTML = "";
+    for (const file of localFiles) {
+      const row = rowTemplate.content.firstElementChild.cloneNode(true);
+      $('[data-role="art"]', row).remove();
+      $('[data-role="title"]', row).textContent = file.name;
+      $('[data-role="artist"]', row).textContent = "Local file · full track";
+      $('[data-role="dur"]', row).textContent = (file.size / 1024 / 1024).toFixed(1) + " MB";
+      $('[data-role="to-a"]', row).addEventListener("click", () => loadFileIntoDeck(file, "a"));
+      $('[data-role="to-b"]', row).addEventListener("click", () => loadFileIntoDeck(file, "b"));
+      list.appendChild(row);
     }
+  }
+  function addLocalFiles(files) {
+    for (const f of files) {
+      if (f.type.startsWith("audio/") || /\.(mp3|wav|ogg|flac|m4a|aac)$/i.test(f.name)) localFiles.push(f);
+    }
+    renderLocalFiles();
+  }
+  const localDrop = $("#local-drop");
+  const localInput = $("#local-input");
+  localDrop.addEventListener("click", () => localInput.click());
+  localDrop.addEventListener("dragover", (e) => { e.preventDefault(); localDrop.classList.add("dragover"); });
+  localDrop.addEventListener("dragleave", () => localDrop.classList.remove("dragover"));
+  localDrop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    localDrop.classList.remove("dragover");
+    addLocalFiles(e.dataTransfer.files);
+  });
+  localInput.addEventListener("change", () => { addLocalFiles(localInput.files); localInput.value = ""; });
+
+  // ---------- Spotify connect / settings ----------
+
+  const setupModal = $("#setup-modal");
+  const clientIdInput = $("#client-id-input");
+  $("#redirect-uri-display").textContent = Spotify.redirectUri();
+  $("#copy-uri-btn").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(Spotify.redirectUri());
+      toast("Redirect URI copied.");
+    } catch { toast("Copy failed — select and copy it manually."); }
   });
 
-  fileInput.addEventListener("change", () => {
-    addFiles(fileInput.files);
-    fileInput.value = "";
+  function openSetup() {
+    clientIdInput.value = Spotify.getClientId();
+    setupModal.hidden = false;
+    clientIdInput.focus();
+  }
+  function closeSetup() { setupModal.hidden = true; }
+  $("#settings-btn").addEventListener("click", openSetup);
+  $("#setup-cancel-btn").addEventListener("click", closeSetup);
+  setupModal.addEventListener("click", (e) => { if (e.target === setupModal) closeSetup(); });
+  $("#setup-save-btn").addEventListener("click", () => {
+    const id = clientIdInput.value.trim();
+    if (!id) { toast("Paste your Spotify Client ID first."); return; }
+    Spotify.setClientId(id);
+    closeSetup();
+    Spotify.login().catch(() => toast("Couldn't start the Spotify login."));
   });
 
-  ["dragenter", "dragover"].forEach((evt) =>
-    dropzone.addEventListener(evt, (e) => {
-      e.preventDefault();
-      dropzone.classList.add("dragover");
-    })
-  );
+  function openSpotifyFlow() {
+    if (!Spotify.getClientId()) openSetup();
+    else Spotify.login().catch(() => toast("Couldn't start the Spotify login."));
+  }
 
-  ["dragleave", "drop"].forEach((evt) =>
-    dropzone.addEventListener(evt, (e) => {
-      e.preventDefault();
-      dropzone.classList.remove("dragover");
-    })
-  );
-
-  dropzone.addEventListener("drop", (e) => {
-    if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  const spotifyBtn = $("#spotify-btn");
+  const spotifyLabel = $("#spotify-btn-label");
+  async function updateSpotifyButton() {
+    if (Spotify.loggedIn()) {
+      spotifyBtn.classList.add("connected");
+      spotifyLabel.textContent = "Spotify ✓";
+      try {
+        const profile = await Spotify.me();
+        spotifyLabel.textContent = profile.display_name || "Spotify ✓";
+      } catch { /* token may have just expired; button click re-auths */ }
+      $("#search-hint").textContent =
+        "Tracks load as Spotify's 30-second preview clips — DRM keeps full streams locked, so drop local files in for full-length tracks.";
+    } else {
+      spotifyBtn.classList.remove("connected");
+      spotifyLabel.textContent = "Connect Spotify";
+    }
+  }
+  spotifyBtn.addEventListener("click", () => {
+    if (Spotify.loggedIn()) {
+      if (confirm("Disconnect from Spotify?")) {
+        Spotify.logout();
+        playlistsLoaded = false;
+        updateSpotifyButton();
+      }
+    } else openSpotifyFlow();
   });
 
-  // allow dropping anywhere on the page without the browser navigating away
-  window.addEventListener("dragover", (e) => e.preventDefault());
-  window.addEventListener("drop", (e) => e.preventDefault());
-
-  $("#convert-all-btn").addEventListener("click", () => {
-    for (const id of items.keys()) convertItem(id);
-  });
-
-  $("#clear-all-btn").addEventListener("click", () => {
-    for (const id of [...items.keys()]) removeItem(id);
-  });
+  (async function initSpotify() {
+    try {
+      if (await Spotify.handleRedirect()) toast("Spotify connected — search away!");
+    } catch { toast("Spotify login failed — check your Client ID and redirect URI."); }
+    updateSpotifyButton();
+  })();
 })();

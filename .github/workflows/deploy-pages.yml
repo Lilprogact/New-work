@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [claude/file-transfer-conversion-site-3i2o7d]
+    branches: [claude/dj-spotify-mixing-platform-ifv6ec]
   workflow_dispatch:
 
 permissions:
