@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Morphly — Convert any file, right in your browser</title>
-  <meta name="description" content="Drag, drop, done. Convert video, audio and images to MP4, MP3, GIF, WebP and more — 100% private, everything runs in your browser." />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+  <title>UltraTune — your browser is the booth</title>
+  <meta name="description" content="A dual-deck DJ rig in your browser. Connect Spotify, load tracks, bend the tempo, sweep the filter, boost the bass and record your mix." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎧</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -17,8 +17,8 @@
       <div class="lock-icon">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
       </div>
-      <h2>Morphly is locked</h2>
-      <p class="lock-sub">Enter the password to open the converter.</p>
+      <h2>UltraTune is locked</h2>
+      <p class="lock-sub">Enter the password to open the booth.</p>
       <input type="password" id="lock-input" placeholder="Password" autocomplete="current-password" autofocus />
       <label class="lock-remember">
         <input type="checkbox" id="lock-remember-check" checked />
@@ -38,125 +38,247 @@
 
   <header class="site-header">
     <div class="logo">
-      <span class="logo-mark">⚡</span>
-      <span class="logo-text">Morphly</span>
+      <span class="logo-mark">🎧</span>
+      <span class="logo-text">Ultra<em>Tune</em></span>
     </div>
     <nav class="header-nav">
-      <span class="privacy-badge" title="Files never leave your device">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        100% private &mdash; nothing is uploaded
-      </span>
+      <button class="btn btn-rec" id="rec-btn" title="Record your mix">
+        <span class="rec-dot"></span><span id="rec-label">REC</span>
+      </button>
+      <button class="btn btn-spotify" id="spotify-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.5 17.3a.75.75 0 0 1-1.03.25c-2.83-1.73-6.39-2.12-10.59-1.16a.75.75 0 1 1-.33-1.46c4.56-1.04 8.5-.6 11.66 1.34.35.22.46.68.25 1.03zm1.47-3.27a.94.94 0 0 1-1.29.31c-3.24-1.99-8.17-2.57-12-1.4a.94.94 0 1 1-.55-1.8c4.38-1.33 9.8-.68 13.53 1.6.44.27.58.85.31 1.29zm.13-3.4C15.24 8.32 8.83 8.11 5.12 9.24a1.13 1.13 0 1 1-.66-2.16c4.27-1.3 11.35-1.05 15.82 1.6a1.13 1.13 0 0 1-1.18 1.95z"/></svg>
+        <span id="spotify-btn-label">Connect Spotify</span>
+      </button>
+      <button class="icon-btn" id="settings-btn" title="Spotify settings" aria-label="Spotify settings">⚙</button>
     </nav>
   </header>
 
   <main>
-    <section class="hero">
-      <h1>Convert <span class="gradient-word" id="rotating-word">anything</span><br />in seconds.</h1>
-      <p class="hero-sub">
-        Drop your files and pick a format. Video, audio and images — converted
-        instantly on your device. No uploads, no sign-ups, no limits.
-      </p>
+    <section class="master-viz-wrap">
+      <canvas id="master-viz" class="master-viz" height="64"></canvas>
     </section>
 
-    <section class="dropzone-wrap">
-      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Drop files here or click to browse">
-        <input type="file" id="file-input" multiple hidden />
-        <div class="dz-inner">
-          <div class="dz-icon">
-            <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
+    <section class="booth">
+      <!-- ================= DECK A ================= -->
+      <div class="deck deck-a" id="deck-a" data-deck="a">
+        <div class="deck-head">
+          <span class="deck-badge">DECK A</span>
+          <span class="deck-time"><span data-role="time">0:00</span> / <span data-role="dur">0:00</span></span>
+        </div>
+
+        <div class="platter-row">
+          <div class="platter" data-role="platter">
+            <div class="vinyl">
+              <div class="vinyl-grooves"></div>
+              <div class="vinyl-label"><span>A</span></div>
+            </div>
           </div>
-          <p class="dz-title">Drag &amp; drop files here</p>
-          <p class="dz-sub">or <span class="dz-browse">browse your device</span></p>
-          <div class="dz-formats">
-            <span class="chip">MP4</span><span class="chip">WebM</span><span class="chip">MOV</span>
-            <span class="chip">GIF</span><span class="chip">MP3</span><span class="chip">WAV</span>
-            <span class="chip">FLAC</span><span class="chip">PNG</span><span class="chip">JPG</span>
-            <span class="chip">WebP</span><span class="chip">+ more</span>
+          <div class="track-meta">
+            <p class="track-title" data-role="title">No track loaded</p>
+            <p class="track-artist" data-role="artist">Search Spotify or drop an audio file on this deck</p>
+            <p class="track-src" data-role="src"></p>
           </div>
         </div>
-      </div>
-      <div class="engine-status" id="engine-status" hidden>
-        <span class="spinner"></span>
-        <span id="engine-status-text">Loading conversion engine…</span>
-      </div>
-    </section>
 
-    <section class="queue" id="queue-section" hidden>
-      <div class="queue-header">
-        <h2>Your files</h2>
-        <div class="queue-actions">
-          <button class="btn btn-ghost" id="clear-all-btn">Clear all</button>
-          <button class="btn btn-primary" id="convert-all-btn">Convert all</button>
+        <canvas class="waveform" data-role="wave" height="72"></canvas>
+
+        <div class="transport">
+          <button class="tbtn" data-role="cue" title="Set / jump to cue point">CUE</button>
+          <button class="tbtn tbtn-play" data-role="play" title="Play / pause">▶</button>
+          <button class="tbtn" data-role="brake" title="Vinyl brake — spin the record down">BRAKE</button>
+          <div class="loop-group">
+            <button class="tbtn tbtn-sm" data-role="loop-in" title="Set loop start">IN</button>
+            <button class="tbtn tbtn-sm" data-role="loop-out" title="Set loop end &amp; engage">OUT</button>
+            <button class="tbtn tbtn-sm" data-role="loop-exit" title="Exit loop">✕</button>
+          </div>
+        </div>
+
+        <div class="deck-controls">
+          <div class="ctrl tempo-ctrl">
+            <label>TEMPO <span data-role="tempo-val">+0.0%</span></label>
+            <input type="range" data-role="tempo" min="0.5" max="1.5" step="0.005" value="1" />
+            <button class="mini-btn" data-role="tempo-reset">RESET</button>
+          </div>
+          <div class="eq-stack">
+            <div class="ctrl"><label>HI</label><input type="range" data-role="eq-hi" min="-24" max="12" step="0.5" value="0" /></div>
+            <div class="ctrl"><label>MID</label><input type="range" data-role="eq-mid" min="-24" max="12" step="0.5" value="0" /></div>
+            <div class="ctrl"><label>LOW</label><input type="range" data-role="eq-lo" min="-24" max="12" step="0.5" value="0" /></div>
+          </div>
+          <div class="ctrl">
+            <label>FILTER</label>
+            <input type="range" data-role="filter" min="-1" max="1" step="0.01" value="0" />
+          </div>
+          <div class="fx-stack">
+            <button class="fx-btn" data-role="boost" title="Bass boost">BOOST</button>
+            <button class="fx-btn" data-role="echo" title="Echo / delay">ECHO</button>
+          </div>
+          <div class="ctrl vol-ctrl">
+            <label>VOL</label>
+            <input type="range" data-role="volume" min="0" max="1" step="0.01" value="0.9" />
+          </div>
+        </div>
+        <input type="file" data-role="file" accept="audio/*" hidden />
+      </div>
+
+      <!-- ================= MIXER ================= -->
+      <div class="mixer">
+        <div class="mixer-brand">MIX</div>
+        <div class="ctrl master-ctrl">
+          <label>MASTER</label>
+          <input type="range" id="master-vol" min="0" max="1" step="0.01" value="0.9" />
+        </div>
+        <div class="xfade-wrap">
+          <div class="xfade-labels"><span class="xa">A</span><span class="xb">B</span></div>
+          <input type="range" id="crossfader" min="-1" max="1" step="0.01" value="0" />
+          <p class="xfade-caption">CROSSFADER</p>
+        </div>
+        <div class="mixer-tips">
+          <p>Tempo bends pitch like real vinyl.</p>
+          <p>Space&nbsp;=&nbsp;play A · Enter&nbsp;=&nbsp;play B</p>
         </div>
       </div>
-      <ul class="file-list" id="file-list"></ul>
+
+      <!-- ================= DECK B ================= -->
+      <div class="deck deck-b" id="deck-b" data-deck="b">
+        <div class="deck-head">
+          <span class="deck-badge">DECK B</span>
+          <span class="deck-time"><span data-role="time">0:00</span> / <span data-role="dur">0:00</span></span>
+        </div>
+
+        <div class="platter-row">
+          <div class="platter" data-role="platter">
+            <div class="vinyl">
+              <div class="vinyl-grooves"></div>
+              <div class="vinyl-label vinyl-label-b"><span>B</span></div>
+            </div>
+          </div>
+          <div class="track-meta">
+            <p class="track-title" data-role="title">No track loaded</p>
+            <p class="track-artist" data-role="artist">Search Spotify or drop an audio file on this deck</p>
+            <p class="track-src" data-role="src"></p>
+          </div>
+        </div>
+
+        <canvas class="waveform" data-role="wave" height="72"></canvas>
+
+        <div class="transport">
+          <button class="tbtn" data-role="cue" title="Set / jump to cue point">CUE</button>
+          <button class="tbtn tbtn-play" data-role="play" title="Play / pause">▶</button>
+          <button class="tbtn" data-role="brake" title="Vinyl brake — spin the record down">BRAKE</button>
+          <div class="loop-group">
+            <button class="tbtn tbtn-sm" data-role="loop-in" title="Set loop start">IN</button>
+            <button class="tbtn tbtn-sm" data-role="loop-out" title="Set loop end &amp; engage">OUT</button>
+            <button class="tbtn tbtn-sm" data-role="loop-exit" title="Exit loop">✕</button>
+          </div>
+        </div>
+
+        <div class="deck-controls">
+          <div class="ctrl tempo-ctrl">
+            <label>TEMPO <span data-role="tempo-val">+0.0%</span></label>
+            <input type="range" data-role="tempo" min="0.5" max="1.5" step="0.005" value="1" />
+            <button class="mini-btn" data-role="tempo-reset">RESET</button>
+          </div>
+          <div class="eq-stack">
+            <div class="ctrl"><label>HI</label><input type="range" data-role="eq-hi" min="-24" max="12" step="0.5" value="0" /></div>
+            <div class="ctrl"><label>MID</label><input type="range" data-role="eq-mid" min="-24" max="12" step="0.5" value="0" /></div>
+            <div class="ctrl"><label>LOW</label><input type="range" data-role="eq-lo" min="-24" max="12" step="0.5" value="0" /></div>
+          </div>
+          <div class="ctrl">
+            <label>FILTER</label>
+            <input type="range" data-role="filter" min="-1" max="1" step="0.01" value="0" />
+          </div>
+          <div class="fx-stack">
+            <button class="fx-btn" data-role="boost" title="Bass boost">BOOST</button>
+            <button class="fx-btn" data-role="echo" title="Echo / delay">ECHO</button>
+          </div>
+          <div class="ctrl vol-ctrl">
+            <label>VOL</label>
+            <input type="range" data-role="volume" min="0" max="1" step="0.01" value="0.9" />
+          </div>
+        </div>
+        <input type="file" data-role="file" accept="audio/*" hidden />
+      </div>
     </section>
 
-    <section class="features">
-      <div class="feature-card">
-        <div class="feature-icon">🔒</div>
-        <h3>Private by design</h3>
-        <p>Conversion happens entirely in your browser with WebAssembly. Your files never touch a server.</p>
+    <!-- ================= LIBRARY ================= -->
+    <section class="library">
+      <div class="lib-tabs">
+        <button class="lib-tab active" data-tab="search">Spotify search</button>
+        <button class="lib-tab" data-tab="playlists">My playlists</button>
+        <button class="lib-tab" data-tab="local">Local files</button>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">🚀</div>
-        <h3>Blazing fast</h3>
-        <p>Images convert instantly. Video &amp; audio are powered by FFmpeg compiled to WebAssembly.</p>
+
+      <div class="lib-pane" id="pane-search">
+        <div class="search-row">
+          <input type="search" id="search-input" placeholder="Search Spotify for tracks, artists…" autocomplete="off" />
+          <button class="btn btn-primary" id="search-btn">Search</button>
+        </div>
+        <p class="lib-hint" id="search-hint">Connect Spotify to search its catalog. Tracks load as Spotify's 30-second preview clips — DRM keeps full streams locked, so drop local files in for full-length tracks.</p>
+        <ul class="track-list" id="search-results"></ul>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">🎛️</div>
-        <h3>20+ formats</h3>
-        <p>MP4, WebM, MOV, AVI, MKV, GIF, MP3, WAV, OGG, FLAC, M4A, PNG, JPG, WebP, BMP and more.</p>
+
+      <div class="lib-pane" id="pane-playlists" hidden>
+        <div class="playlist-nav" id="playlist-nav"></div>
+        <ul class="track-list" id="playlist-results"></ul>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">∞</div>
-        <h3>No limits</h3>
-        <p>No file caps, no watermarks, no accounts. Free forever — it runs on your hardware, after all.</p>
+
+      <div class="lib-pane" id="pane-local" hidden>
+        <div class="local-drop" id="local-drop" tabindex="0" role="button">
+          <p><strong>Drop audio files here</strong> or <span class="dz-browse">browse</span> — then send them to a deck.</p>
+          <p class="lib-hint">MP3, WAV, OGG, FLAC, M4A… anything your browser can decode. Files never leave your device.</p>
+          <input type="file" id="local-input" accept="audio/*" multiple hidden />
+        </div>
+        <ul class="track-list" id="local-results"></ul>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
-    <p>⚡ Morphly — files in, magic out. Everything stays on your device.</p>
+    <p>🎧 UltraTune — two decks, zero installs. Audio is processed live in your browser.</p>
   </footer>
 
-  <template id="file-item-template">
-    <li class="file-item">
-      <div class="file-icon" data-role="icon">📄</div>
-      <div class="file-meta">
-        <p class="file-name" data-role="name"></p>
-        <p class="file-info"><span data-role="size"></span> · <span data-role="type"></span></p>
-        <div class="progress-track" data-role="progress-track" hidden>
-          <div class="progress-bar" data-role="progress-bar"></div>
-        </div>
-        <p class="file-status" data-role="status"></p>
+  <!-- Spotify setup modal -->
+  <div class="modal-backdrop" id="setup-modal" hidden>
+    <div class="modal">
+      <h2>Connect UltraTune to Spotify</h2>
+      <p class="modal-sub">UltraTune runs with no server, so it needs your own (free) Spotify app ID. Two minutes, one time:</p>
+      <ol class="setup-steps">
+        <li>Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> and log in.</li>
+        <li>Click <strong>Create app</strong> — any name works.</li>
+        <li>Under <strong>Redirect URIs</strong>, add exactly:
+          <code class="redirect-uri" id="redirect-uri-display"></code>
+          <button class="mini-btn" id="copy-uri-btn">Copy</button>
+        </li>
+        <li>Select <strong>Web API</strong>, save, and copy the <strong>Client ID</strong> here:</li>
+      </ol>
+      <input type="text" id="client-id-input" placeholder="Spotify Client ID" autocomplete="off" spellcheck="false" />
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="setup-cancel-btn">Cancel</button>
+        <button class="btn btn-primary" id="setup-save-btn">Save &amp; log in</button>
       </div>
-      <div class="file-controls">
-        <label class="select-wrap" data-role="quality-wrap" hidden>
-          <span class="select-label">size</span>
-          <select data-role="quality">
-            <option value="1280" selected>720p · fast</option>
-            <option value="1920">1080p</option>
-            <option value="0">Original</option>
-          </select>
-        </label>
-        <label class="select-wrap">
-          <span class="select-label">to</span>
-          <select data-role="format"></select>
-        </label>
-        <button class="btn btn-primary btn-sm" data-role="convert">Convert</button>
-        <a class="btn btn-success btn-sm" data-role="download" hidden download>Download</a>
-        <button class="icon-btn" data-role="remove" title="Remove" aria-label="Remove file">✕</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <template id="track-row-template">
+    <li class="track-row">
+      <img class="row-art" data-role="art" alt="" />
+      <div class="row-meta">
+        <p class="row-title" data-role="title"></p>
+        <p class="row-artist" data-role="artist"></p>
+      </div>
+      <span class="row-dur" data-role="dur"></span>
+      <span class="row-badge" data-role="badge" hidden></span>
+      <div class="row-actions">
+        <button class="deck-load-btn to-a" data-role="to-a" title="Load into Deck A">A</button>
+        <button class="deck-load-btn to-b" data-role="to-b" title="Load into Deck B">B</button>
       </div>
     </li>
   </template>
 
-  <script src="vendor/ffmpeg/ffmpeg.js"></script>
-  <script src="vendor/ffmpeg/util.js"></script>
+  <script src="js/deck.js"></script>
+  <script src="js/spotify.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
