@@ -176,27 +176,52 @@
     }, 250);
   }, 2600);
 
-  // ---------- ffmpeg engine (lazy singleton) ----------
+  // ---------- ffmpeg engine (lazy singleton, self-hosted) ----------
 
-  const FFMPEG_VERSION = "0.12.10";
-  const CORE_VERSION = "0.12.6";
+  const ENGINE_BASE = new URL("vendor/ffmpeg/", window.location.href);
   let ffmpegPromise = null;
   let onFfmpegProgress = null; // progress callback for the job currently running
   let ffmpegLogs = []; // rolling log buffer so failures can show the real reason
+
+  // fetch with a byte-level progress callback so the ~30 MB wasm download
+  // shows real percentages instead of an opaque spinner
+  async function fetchWithProgress(url, onPct) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Engine file failed to load (${res.status}): ${url}`);
+    const total = parseInt(res.headers.get("Content-Length") || "0", 10);
+    if (!res.body || !total) return new Uint8Array(await res.arrayBuffer());
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      onPct(Math.round((received / total) * 100));
+    }
+    const out = new Uint8Array(received);
+    let offset = 0;
+    for (const c of chunks) { out.set(c, offset); offset += c.length; }
+    return out;
+  }
 
   function loadFFmpeg() {
     if (ffmpegPromise) return ffmpegPromise;
 
     ffmpegPromise = (async () => {
       if (!window.FFmpegWASM || !window.FFmpegUtil) {
-        throw new Error("Conversion engine failed to load — check your connection and refresh.");
+        throw new Error("Conversion engine script missing — refresh the page and try again.");
       }
       engineStatus.hidden = false;
-      engineStatusText.textContent = "Downloading conversion engine (~30 MB, one time)…";
+      engineStatusText.textContent = "Loading conversion engine…";
 
       const { FFmpeg } = window.FFmpegWASM;
-      const { toBlobURL } = window.FFmpegUtil;
-      const coreBase = `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/umd`;
+
+      const wasmBytes = await fetchWithProgress(new URL("ffmpeg-core.wasm", ENGINE_BASE), (pct) => {
+        engineStatusText.textContent = `Downloading conversion engine… ${pct}% (one time)`;
+      });
+      engineStatusText.textContent = "Starting conversion engine…";
 
       const ffmpeg = new FFmpeg();
       ffmpeg.on("progress", ({ progress }) => {
@@ -207,13 +232,12 @@
         if (ffmpegLogs.length > 60) ffmpegLogs.shift();
       });
 
+      // no classWorkerURL: ffmpeg.js then spawns its worker (814.ffmpeg.js)
+      // from its own directory as a CLASSIC worker — required, because the
+      // module-worker path it uses otherwise cannot importScripts the UMD core
       await ffmpeg.load({
-        coreURL: await toBlobURL(`${coreBase}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, "application/wasm"),
-        classWorkerURL: await toBlobURL(
-          `https://unpkg.com/@ffmpeg/ffmpeg@${FFMPEG_VERSION}/dist/umd/814.ffmpeg.js`,
-          "text/javascript"
-        ),
+        coreURL: new URL("ffmpeg-core.js", ENGINE_BASE).href,
+        wasmURL: URL.createObjectURL(new Blob([wasmBytes], { type: "application/wasm" })),
       });
 
       engineStatus.hidden = true;
