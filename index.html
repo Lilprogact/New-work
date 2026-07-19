@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Morphly — Convert any file, right in your browser</title>
+  <meta name="description" content="Drag, drop, done. Convert video, audio and images to MP4, MP3, GIF, WebP and more — 100% private, everything runs in your browser." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="locked">
+  <div class="lock-screen" id="lock-screen">
+    <form class="lock-card" id="lock-form">
+      <div class="lock-icon">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <h2>Morphly is locked</h2>
+      <p class="lock-sub">Enter the password to open the converter.</p>
+      <input type="password" id="lock-input" placeholder="Password" autocomplete="current-password" autofocus />
+      <label class="lock-remember">
+        <input type="checkbox" id="lock-remember-check" checked />
+        Remember me on this device
+      </label>
+      <button class="btn btn-primary lock-btn" type="submit">Unlock</button>
+      <p class="lock-error" id="lock-error" role="alert"></p>
+    </form>
+  </div>
+
+  <div class="bg-orbs" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="grid-overlay"></div>
+  </div>
+
+  <header class="site-header">
+    <div class="logo">
+      <span class="logo-mark">⚡</span>
+      <span class="logo-text">Morphly</span>
+    </div>
+    <nav class="header-nav">
+      <span class="privacy-badge" title="Files never leave your device">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        100% private &mdash; nothing is uploaded
+      </span>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Convert <span class="gradient-word" id="rotating-word">anything</span><br />in seconds.</h1>
+      <p class="hero-sub">
+        Drop your files and pick a format. Video, audio and images — converted
+        instantly on your device. No uploads, no sign-ups, no limits.
+      </p>
+    </section>
+
+    <section class="dropzone-wrap">
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Drop files here or click to browse">
+        <input type="file" id="file-input" multiple hidden />
+        <div class="dz-inner">
+          <div class="dz-icon">
+            <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <p class="dz-title">Drag &amp; drop files here</p>
+          <p class="dz-sub">or <span class="dz-browse">browse your device</span></p>
+          <div class="dz-formats">
+            <span class="chip">MP4</span><span class="chip">WebM</span><span class="chip">MOV</span>
+            <span class="chip">GIF</span><span class="chip">MP3</span><span class="chip">WAV</span>
+            <span class="chip">FLAC</span><span class="chip">PNG</span><span class="chip">JPG</span>
+            <span class="chip">WebP</span><span class="chip">+ more</span>
+          </div>
+        </div>
+      </div>
+      <div class="engine-status" id="engine-status" hidden>
+        <span class="spinner"></span>
+        <span id="engine-status-text">Loading conversion engine…</span>
+      </div>
+    </section>
+
+    <section class="queue" id="queue-section" hidden>
+      <div class="queue-header">
+        <h2>Your files</h2>
+        <div class="queue-actions">
+          <button class="btn btn-ghost" id="clear-all-btn">Clear all</button>
+          <button class="btn btn-primary" id="convert-all-btn">Convert all</button>
+        </div>
+      </div>
+      <ul class="file-list" id="file-list"></ul>
+    </section>
+
+    <section class="features">
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>Private by design</h3>
+        <p>Conversion happens entirely in your browser with WebAssembly. Your files never touch a server.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🚀</div>
+        <h3>Blazing fast</h3>
+        <p>Images convert instantly. Video &amp; audio are powered by FFmpeg compiled to WebAssembly.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🎛️</div>
+        <h3>20+ formats</h3>
+        <p>MP4, WebM, MOV, AVI, MKV, GIF, MP3, WAV, OGG, FLAC, M4A, PNG, JPG, WebP, BMP and more.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">∞</div>
+        <h3>No limits</h3>
+        <p>No file caps, no watermarks, no accounts. Free forever — it runs on your hardware, after all.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>⚡ Morphly — files in, magic out. Everything stays on your device.</p>
+  </footer>
+
+  <template id="file-item-template">
+    <li class="file-item">
+      <div class="file-icon" data-role="icon">📄</div>
+      <div class="file-meta">
+        <p class="file-name" data-role="name"></p>
+        <p class="file-info"><span data-role="size"></span> · <span data-role="type"></span></p>
+        <div class="progress-track" data-role="progress-track" hidden>
+          <div class="progress-bar" data-role="progress-bar"></div>
+        </div>
+        <p class="file-status" data-role="status"></p>
+      </div>
+      <div class="file-controls">
+        <label class="select-wrap">
+          <span class="select-label">to</span>
+          <select data-role="format"></select>
+        </label>
+        <button class="btn btn-primary btn-sm" data-role="convert">Convert</button>
+        <a class="btn btn-success btn-sm" data-role="download" hidden download>Download</a>
+        <button class="icon-btn" data-role="remove" title="Remove" aria-label="Remove file">✕</button>
+      </div>
+    </li>
+  </template>
+
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+  <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
