@@ -4,10 +4,10 @@
   "use strict";
 
   // ---------- access gate ----------
-  // Same password as before the redesign; stored only as a SHA-256 hash.
+  // Password is stored only as a SHA-256 hash.
 
-  const PASS_HASH = "3a54e2b634913ca0900f408fe466f548793cc5aab1d79c7c3b686d5bbec02cf1";
-  const UNLOCK_KEY = "morphly_unlocked";
+  const PASS_HASH = "a383546be159b656f1dd95449860b32e3775d95688b8ff44b69838686d114a64";
+  const UNLOCK_KEY = "ultratune_unlocked";
 
   async function sha256Hex(text) {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
